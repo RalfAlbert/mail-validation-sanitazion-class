@@ -29,60 +29,6 @@ class MailTest extends PHPUnit_Framework_TestCase
 	public function tearDown() {}
 
 	/**
-	 * @covers Mail::strip_comment()
-	 * @dataProvider strip_comments_DataProvider
-	 * @param	string	$mail
-	 * @param	string	$expected
-	 */
-	public function testStrip_comments( $string, $expected ) {
-		$actual = $this->mail->strip_comment( $string );
-		$this->assertEquals( $expected, $actual );
-	}
-
-	/**
-	 * @covers Mail::validate_local_part()
-	 * @dataProvider mail_DataProvider
-	 * @dataProvider other_mail_DataProvider
-	 * @dataProvider local_DataProvider
-	 * @param	string	$mail
-	 * @param	boolean	$expected
-	 * @param	string	$sanitized
-	 */
-	public function testValidate_local_part( $mail, $expected, $sanitized ) {
-		preg_match( '#(.+)@([^@]+)$#', $mail, $parts );
-		// workaround for bad mails without a @ char
-		if ( sizeof( $parts ) < 3 ) {
-			// not testable, set $actual to true
-			$actual = $expected;
-		} else {
-			list( $mail, $local, $domain ) = $parts;
-			$actual = $this->mail->validate_local_part( $local );
-		}
-
-		if ( $actual != $expected ) {
-			var_dump( $actual, $local, $this->mail->whynot );
-		}
-
-		$this->assertEquals( $expected, $actual );
-	}
-
-	/**
-	 * @covers Mail::validate_domain_part()
-	 * @dataProvider domain_DataProvider
-	 * @param	string	$domain
-	 * @param	boolean	$expected
-	 */
-	public function testValidate_domain_part( $domain, $expected ) {
-		$actual = $this->mail->validate_domain_part( $domain );
-
-		if ( $actual != $expected ) {
-			var_dump( $actual, $domain, $this->mail->whynot );
-		}
-
-		$this->assertEquals( $expected, $actual );
-	}
-
-	/**
 	 * Test if an email is valid
 	 * @covers Mail::is_email()
 	 * @dataProvider mail_DataProvider
@@ -91,7 +37,6 @@ class MailTest extends PHPUnit_Framework_TestCase
 	 */
 	public function testIs_mail( $mail, $expected, $sanitized) {
 		$actual = $this->mail->is_mail( $mail );
-		if ( ! empty( $this->mail->whynot ) ) var_dump( $this->mail->whynot );
 		$this->assertEquals( $expected, $actual );
 	}
 
@@ -169,15 +114,20 @@ class MailTest extends PHPUnit_Framework_TestCase
 	 */
 	public function other_mail_DataProvider() {
 		return array(
-			array( 'john@smith@example.com', false, '' ),
-			array( 'too..much...dots....@example.org', false, '' ),
+			// two @ signs; not escaped @ sign
+			array( 'john@smith@example.com',                            false, '' ),
+			array( 'john\@smith@example.com',                           true, '' ),
+			// dot period; dots at start and/or end
+			array( 'too..much...dots....@example.org',                  false, '' ),
 			array( '.local.part.should.not.start.with.dot@example.org', false, '' ),
-			array( 'local.part.should.not.end.with.dot.@example.org', false, '' ),
-			array( 'john-doe@.should.not.start.with.dot.org', false, '' ),
-			array( 'john-doe@should.not.end.with.dot.org.', false, '' ),
-			array( 'john-doe@Ümlaut-domän.cöm', true, '' ),
-			array( 'john-doe@ümlaut-domän.cöm', true, '' ),
-			array( 'john-doe@Ümlaut?domän.com', false, '' ),
+			array( 'local.part.should.not.end.with.dot.@example.org',   false, '' ),
+			array( 'john-doe@.should.not.start.with.dot.org',           false, '' ),
+			array( 'john-doe@should.not.end.with.dot.org.',             false, '' ),
+			// punycode
+			array( 'john-doe@Ümlaut-domän.cöm',                         true, '' ),
+			array( 'john-doe@ümlaut-domän.cöm',                         true, '' ),
+			array( 'john-doe@Ümlaut?domän.com',                         false, '' ),
+			// too long label
 			array( 'hans.klein@to.longlable123456789012345678901234567890123456789012345678901234567890.long.lable', false, '' ),
 		);
 	}
@@ -204,84 +154,6 @@ class MailTest extends PHPUnit_Framework_TestCase
 			array( 'jo.sm@example(commentedemail).com',  false, 'jo.sm@example.com' ),
 			array( 'jo(commented email).sm@example.com', false, 'jo.sm@example.com' ),
 			array( 'jo.sm@example(commented email).com', false, 'jo.sm@example.com' ),
-		);
-	}
-
-	/**
-	 * DataProvider for validate and sanitize local part
-	 * @return	array
-	 */
-	public function local_DataProvider() {
-		return array(
-			array( 'jo.sm(commentedemail)@example.com', true, 'jo.sm@example.com' ), // comment at start of local part
-			array( '(commentedemail)jo.sm@example.com', true, 'jo.sm@example.com' ), // comment at end of local part
-			array( 'jo.sm@(commentedemail)example.com', true, 'jo.sm@example.com' ), // comment at start of domain
-
-			// comments with space, same as above
-			array( 'jo.sm(commented email)@example.com', true, 'jo.sm@example.com' ),
-			array( '(commented email)jo.sm@example.com', true, 'jo.sm@example.com' ),
-			array( 'jo.sm@(commented email)example.com', true, 'jo.sm@example.com' ),
-
-			// invalid comments
-			array( 'jo(commentedemail).sm@example.com',  false, 'jo.sm@example.com' ),
-			array( 'jo(commented email).sm@example.com', false, 'jo.sm@example.com' ),
-		);
-	}
-
-	/**
-	 * DataProvider for valiadate and sanitize domain
-	 * @return array
-	 */
-	public function domain_DataProvider() {
-		return array(
-			array( '(commentedemail)example.com',  true ), // comment at start of domain
-			array( 'example.com(commentedemail)',  true ), // comment at end of domain
-			array( '(commented email)example.com', true ),
-			array( 'example.com(commented email)', true ),
-
-			array( 'example.org', true ),
-			array( 'localhost', true ),
-			array( '[192.168.0.1]', true ),
-			array( '[192.bad.ip.001]', false ),
-			array( '[2001:2001:db8:1ff::a0b:dbd0]', true ),
-			array( '[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]', true ),
-			array( '[2001:0DB8:85A3:08D3:1319:8A2E:0370:7344/128]', false ),
-			array( '[2001:0DB8:85A3:0:1319:0:0370:7344]', true ),
-//TODO: compressed IPv6 ([2001:0DB8:85A3::1319::0370:7344])
-			array( 'dotdot..org', false ),
-			array( '.dot.start.com', false ),
-			array( 'dot.end.com.', false ),
-			array( '.dot.start.and.end.', false ),
-			array( '-start-with-hyphen.com', false ),
-			array( 'hyphen-at-end.org-', false ),
-			array( '-hyphen-both-sides-', false ),
-			array( 'to.longlable123456789012345678901234567890123456789012345678901234567890.long.lable', false),
-			array( 'böse-straße.de', true ),
-			array( 'ganz_böse_straße?.de', false ),
-			array( 'bisschen-böse-straße?.de', false ),
-		);
-	}
-
-	/**
-	 * DataProvider for commented emails
-	 * @return	array
-	 */
-	public function strip_comments_DataProvider() {
-		return array(
-			array( 'jo-sm(commentedemail)',       'jo-sm' ), // comment at end of local part
-			array( '(commentedemail)jo.sm',       'jo.sm' ), // comment at start of local part
-			array( '(commentedemail)example.com', 'example.com'), // comment at start of domain
-			array( 'example.com(commentedemail)', 'example.com'), // comment at end of domain
-
-			// comments with space, same as above
-			array( 'jo-sm(commented email)',       'jo-sm' ),
-			array( '(commented email)jo.sm',       'jo.sm' ),
-			array( '(commented email)example.com', 'example.com' ),
-			array( 'example.com(commented email)', 'example.com' ),
-
-			// invalid comments
-			array( 'jo(commented email)sm',       'jo(commented email)sm' ),
-			array( 'example(commented email)com', 'example(commented email)com' ),
 		);
 	}
 
